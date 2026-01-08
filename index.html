@@ -55,7 +55,7 @@
 
         /* 천장 상태 스타일 */
         .status-low { color: #888; font-size: 0.9em; }           /* 천장미달 */
-        .status-mid { color: #00d26a; font-weight: bold; }       /* 추천게임 */
+        .status-mid { color: #00d26a; font-weight: bold; }       /* 추천 게임 */
         .status-high { color: #ff5555; font-weight: bold; animation: pulse 2s infinite; } /* 리퀘스트 */
 
         /* 0개일 때 흐리게 처리 */
@@ -83,13 +83,15 @@
         const API_URL = `https://opensheet.elk.sh/${SHEET_ID}/1`;
 
         // [설정] 표기할 보상 목록 및 순서 (이름이 엑셀과 정확히 일치해야 함)
+        // 수정됨: '추천 게임' 띄어쓰기 반영, '애교권' 추가 (매도권과 배박수 사이)
         const TARGET_REWARDS = [
             "커미션 30% 할인권",
             "리퀘스트 쿠폰",
-            "추천게임",
+            "추천 게임",
             "겉옷 1일 벗기",
             "겉옷 30분 벗기",
             "매도권",
+            "애교권",
             "배박수",
             "촉슈권 10분"
         ];
@@ -104,9 +106,16 @@
 
                 rawData.forEach(row => {
                     const nickname = row['닉네임'];
-                    const reward = row['보상'];
+                    let reward = row['보상']; // 수정 가능하도록 let 사용
                     
                     if (!nickname || !reward) return;
+
+                    // [데이터 정규화]
+                    // 1. 공백 제거 후 비교하여 "추천게임"을 "추천 게임"으로 통일
+                    // (과거 데이터 호환성 및 최신 데이터 반영)
+                    if (reward.replace(/\s+/g, '') === '추천게임') {
+                        reward = '추천 게임';
+                    }
 
                     // 유저 데이터 초기화
                     if (!userStats[nickname]) {
@@ -154,7 +163,7 @@
                         statusText = "리퀘스트";
                         statusClass = "status-high";
                     } else if (count >= 100) {
-                        statusText = "추천게임";
+                        statusText = "추천 게임"; // 텍스트 통일
                         statusClass = "status-mid";
                     }
                     // 천장미달은 그대로 유지
