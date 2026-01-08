@@ -1,3 +1,5 @@
+--- START OF FILE index.html ---
+
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -26,12 +28,12 @@
             border-collapse: collapse;
             background-color: #2a2a2a;
             box-shadow: 0 0 10px rgba(0,0,0,0.5);
-            font-size: 13px; /* 컬럼이 많아져서 글자 크기 약간 조정 */
+            font-size: 14px;
         }
 
         .stats-table th, .stats-table td {
             border: 1px solid #444;
-            padding: 8px 5px;
+            padding: 10px 8px;
             text-align: center;
         }
 
@@ -43,24 +45,22 @@
             position: sticky;
             top: 0;
             z-index: 10;
-            white-space: nowrap; /* 헤더 줄바꿈 방지 */
         }
 
         /* 닉네임 열 강조 */
         .stats-table td:first-child {
             font-weight: bold;
             color: #FFD700;
-            min-width: 80px;
         }
 
         /* 천장 상태 스타일 */
-        .status-low { color: #888; font-size: 0.9em; }           /* 천장미달 */
-        .status-mid { color: #00d26a; font-weight: bold; }       /* 추천게임 */
+        .status-low { color: #aaa; }           /* 천장미달 */
+        .status-mid { color: #00d26a; font-weight: bold; } /* 추천게임 */
         .status-high { color: #ff5555; font-weight: bold; animation: pulse 2s infinite; } /* 리퀘스트 */
 
         /* 0개일 때 흐리게 처리 */
-        .count-zero { color: #444; }
-        .count-value { color: #fff; font-weight: bold; font-size: 1.1em; }
+        .count-zero { color: #555; }
+        .count-value { color: #fff; font-weight: bold; }
 
         @keyframes pulse {
             0% { text-shadow: 0 0 5px #ff5555; }
@@ -71,8 +71,8 @@
 </head>
 <body>
 
-    <h1>📊 유저별 룰렛 통계</h1>
-    <div id="table-container" style="overflow-x: auto;">데이터 로딩 중...</div>
+    <h1>📊 유저별 룰렛 통계 & 천장 현황</h1>
+    <div id="table-container">데이터 로딩 중...</div>
 
     <script>
         // =========================================================
@@ -82,18 +82,6 @@
 
         const API_URL = `https://opensheet.elk.sh/${SHEET_ID}/1`;
 
-        // [설정] 표기할 보상 목록 및 순서 (이름이 엑셀과 정확히 일치해야 함)
-        const TARGET_REWARDS = [
-            "커미션 30% 할인권",
-            "리퀘스트 쿠폰",
-            "추천게임",
-            "겉옷 1일 벗기",
-            "겉옷 30분 벗기",
-            "매도권",
-            "배박수",
-            "촉슈권 10분"
-        ];
-
         async function loadData() {
             try {
                 const response = await fetch(API_URL);
@@ -101,6 +89,7 @@
 
                 // 데이터 가공 (유저별 집계)
                 const userStats = {};
+                const allRewards = new Set(); // 등장한 모든 보상 목록
 
                 rawData.forEach(row => {
                     const nickname = row['닉네임'];
@@ -111,28 +100,46 @@
                     // 유저 데이터 초기화
                     if (!userStats[nickname]) {
                         userStats[nickname] = {
-                            totalSpins: 0, // 천장 계산용 전체 횟수
-                            rewards: {}    // 보상별 개수 저장
+                            totalSpins: 0,
+                            rewards: {}
                         };
                     }
 
-                    // 전체 횟수 증가 (천장 등급 판별용)
+                    // 카운트 증가
                     userStats[nickname].totalSpins += 1;
-
-                    // 보상 개수 카운트
                     userStats[nickname].rewards[reward] = (userStats[nickname].rewards[reward] || 0) + 1;
+                    
+                    // 보상 목록에 추가 (애교권도 포함됨)
+                    allRewards.add(reward);
                 });
 
-                // 테이블 생성 시작
+                // 보상 목록 정렬 로직 (요청: 매도권 -> 애교권 -> 배박수)
+                const customOrder = ["매도권", "애교권", "배박수"];
+                
+                const rewardList = Array.from(allRewards).sort((a, b) => {
+                    const idxA = customOrder.indexOf(a);
+                    const idxB = customOrder.indexOf(b);
+
+                    // 둘 다 커스텀 오더에 있으면 지정된 순서대로
+                    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+                    // a만 있으면 앞으로
+                    if (idxA !== -1) return -1;
+                    // b만 있으면 앞으로
+                    if (idxB !== -1) return 1;
+
+                    // 나머지는 가나다순
+                    return a.localeCompare(b);
+                });
+
+                // 테이블 생성
                 let html = `<table class="stats-table">`;
                 
-                // 1. 테이블 헤더 생성 (고정된 순서 적용)
+                // 1. 테이블 헤더 생성
                 html += `<thead><tr>
-                            <th style="width: 10%;">닉네임</th>
-                            <th style="width: 10%;">천장 여부</th>`;
+                            <th style="width: 15%;">닉네임</th>
+                            <th style="width: 15%;">천장 여부 (횟수)</th>`;
                 
-                // 지정된 보상 목록대로 헤더 생성
-                TARGET_REWARDS.forEach(r => {
+                rewardList.forEach(r => {
                     html += `<th>${r}</th>`;
                 });
                 html += `</tr></thead><tbody>`;
@@ -146,29 +153,27 @@
                     const stats = userStats[user];
                     const count = stats.totalSpins;
                     
-                    // 천장 로직 적용 (100미만 / 100~149 / 150이상)
+                    // 천장 로직 적용 (텍스트 수정: 추천게임 -> 추천 게임)
                     let statusText = "천장미달";
                     let statusClass = "status-low";
 
                     if (count >= 150) {
-                        statusText = "리퀘스트";
+                        statusText = "🔥 리퀘스트";
                         statusClass = "status-high";
                     } else if (count >= 100) {
-                        statusText = "추천게임";
+                        statusText = "✅ 추천 게임";
                         statusClass = "status-mid";
                     }
-                    // 천장미달은 그대로 유지
 
                     html += `<tr>
                                 <td>${user}</td>
                                 <td>
-                                    <span class="${statusClass}">${statusText}</span>
-                                    <!-- 횟수 표기 삭제됨 -->
+                                    <span class="${statusClass}">${statusText}</span><br>
+                                    <span style="font-size:0.8em; color:#888;">(${count}회)</span>
                                 </td>`;
 
-                    // 지정된 보상 순서대로 개수 출력
-                    TARGET_REWARDS.forEach(rewardName => {
-                        // 해당 보상이 없으면 0으로 처리
+                    // 각 보상별 개수 출력
+                    rewardList.forEach(rewardName => {
                         const rewardCount = stats.rewards[rewardName] || 0;
                         const countClass = rewardCount === 0 ? "count-zero" : "count-value";
                         html += `<td class="${countClass}">${rewardCount}</td>`;
@@ -183,7 +188,7 @@
 
             } catch (error) {
                 console.error("데이터 로드 실패:", error);
-                document.getElementById('table-container').innerHTML = `<p style="text-align:center; color:red;">데이터 로드 실패.<br>시트 ID를 확인해주세요.</p>`;
+                document.getElementById('table-container').innerHTML = "데이터를 불러오는데 실패했습니다. 시트 ID나 권한을 확인하세요.";
             }
         }
 
