@@ -3,61 +3,179 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>실시간 룰렛 현황</title>
+    <title>룰렛 통계 현황</title>
     <style>
-        /* 이전과 동일한 스타일 사용 */
-        body { background-color: #1a1a1a; color: white; font-family: sans-serif; padding: 20px; }
-        .card { background: #333; padding: 15px; margin-bottom: 10px; border-radius: 8px; border-left: 5px solid #00d26a; display:flex; justify-content:space-between; }
-        .nickname { font-weight: bold; color: #00ffcc; }
-        .time { font-size: 0.8em; color: #aaa; }
-        .reward { font-weight: bold; font-size: 1.2em; }
+        body {
+            background-color: #1a1a1a;
+            color: #ffffff;
+            font-family: 'Malgun Gothic', sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 {
+            text-align: center;
+            color: #FFD700;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px #000000;
+        }
+
+        /* 테이블 스타일 */
+        .stats-table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: #2a2a2a;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            font-size: 14px;
+        }
+
+        .stats-table th, .stats-table td {
+            border: 1px solid #444;
+            padding: 10px 8px;
+            text-align: center;
+        }
+
+        /* 헤더 스타일 */
+        .stats-table th {
+            background-color: #333;
+            color: #00d26a; /* 치지직 그린 */
+            font-weight: bold;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        /* 닉네임 열 강조 */
+        .stats-table td:first-child {
+            font-weight: bold;
+            color: #FFD700;
+        }
+
+        /* 천장 상태 스타일 */
+        .status-low { color: #aaa; }           /* 천장미달 */
+        .status-mid { color: #00d26a; font-weight: bold; } /* 추천게임 */
+        .status-high { color: #ff5555; font-weight: bold; animation: pulse 2s infinite; } /* 리퀘스트 */
+
+        /* 0개일 때 흐리게 처리 */
+        .count-zero { color: #555; }
+        .count-value { color: #fff; font-weight: bold; }
+
+        @keyframes pulse {
+            0% { text-shadow: 0 0 5px #ff5555; }
+            50% { text-shadow: 0 0 15px #ff5555; }
+            100% { text-shadow: 0 0 5px #ff5555; }
+        }
     </style>
 </head>
 <body>
-    <h1 style="text-align:center; color:#FFD700;">🏆 명예의 전당 🏆</h1>
-    <div id="list-container">로딩 중...</div>
+
+    <h1>📊 유저별 룰렛 통계 & 천장 현황</h1>
+    <div id="table-container">데이터 로딩 중...</div>
 
     <script>
-        // 아까 복사한 스프레드시트 ID를 여기에 넣으세요!
-        const SHEET_ID = "1r3P3kwK51SAOzgTu-v0RtY0CliZ7JcWfzgarOdedql0";
-        
-        // Opensheet API를 사용하면 무료로 JSON 변환을 해줍니다.
+        // =========================================================
+        // [중요] 여기에 본인의 구글 스프레드시트 ID를 입력하세요
+        const SHEET_ID = "1r3P3kwK51SAOzgTu-v0RtY0CliZ7JcWfzgarOdedql0"; 
+        // =========================================================
+
         const API_URL = `https://opensheet.elk.sh/${SHEET_ID}/1`;
 
         async function loadData() {
             try {
                 const response = await fetch(API_URL);
-                const data = await response.json();
-                
-                // 데이터 역순 정렬 (최신이 위로)
-                const reversedData = data.reverse();
-                
-                const container = document.getElementById('list-container');
-                container.innerHTML = "";
+                const rawData = await response.json();
 
-                reversedData.forEach(row => {
-                    // 구글 시트 헤더 이름('닉네임', '시간', '보상')과 정확히 일치해야 함
-                    const nickname = row['닉네임'] || "익명";
-                    const time = row['시간'] || "-";
-                    const reward = row['보상'] || "알 수 없음";
+                // 데이터 가공 (유저별 집계)
+                const userStats = {};
+                const allRewards = new Set(); // 등장한 모든 보상 목록
 
-                    const card = document.createElement('div');
-                    card.className = 'card';
-                    card.innerHTML = `
-                        <div>
-                            <div class="nickname">${nickname}</div>
-                            <div class="time">${time}</div>
-                        </div>
-                        <div class="reward">${reward}</div>
-                    `;
-                    container.appendChild(card);
+                rawData.forEach(row => {
+                    const nickname = row['닉네임'];
+                    const reward = row['보상'];
+                    
+                    if (!nickname || !reward) return;
+
+                    // 유저 데이터 초기화
+                    if (!userStats[nickname]) {
+                        userStats[nickname] = {
+                            totalSpins: 0,
+                            rewards: {}
+                        };
+                    }
+
+                    // 카운트 증가
+                    userStats[nickname].totalSpins += 1;
+                    userStats[nickname].rewards[reward] = (userStats[nickname].rewards[reward] || 0) + 1;
+                    
+                    // 보상 목록에 추가
+                    allRewards.add(reward);
                 });
+
+                // 보상 목록을 가나다순 정렬
+                const rewardList = Array.from(allRewards).sort();
+
+                // 테이블 생성
+                let html = `<table class="stats-table">`;
+                
+                // 1. 테이블 헤더 생성
+                html += `<thead><tr>
+                            <th style="width: 15%;">닉네임</th>
+                            <th style="width: 15%;">천장 여부 (횟수)</th>`;
+                
+                rewardList.forEach(r => {
+                    html += `<th>${r}</th>`;
+                });
+                html += `</tr></thead><tbody>`;
+
+                // 2. 테이블 본문 생성 (많이 돌린 순으로 정렬)
+                const sortedUsers = Object.keys(userStats).sort((a, b) => {
+                    return userStats[b].totalSpins - userStats[a].totalSpins;
+                });
+
+                sortedUsers.forEach(user => {
+                    const stats = userStats[user];
+                    const count = stats.totalSpins;
+                    
+                    // 천장 로직 적용
+                    let statusText = "천장미달";
+                    let statusClass = "status-low";
+
+                    if (count >= 150) {
+                        statusText = "🔥 리퀘스트";
+                        statusClass = "status-high";
+                    } else if (count >= 100) {
+                        statusText = "✅ 추천게임";
+                        statusClass = "status-mid";
+                    }
+
+                    html += `<tr>
+                                <td>${user}</td>
+                                <td>
+                                    <span class="${statusClass}">${statusText}</span><br>
+                                    <span style="font-size:0.8em; color:#888;">(${count}회)</span>
+                                </td>`;
+
+                    // 각 보상별 개수 출력
+                    rewardList.forEach(rewardName => {
+                        const rewardCount = stats.rewards[rewardName] || 0;
+                        const countClass = rewardCount === 0 ? "count-zero" : "count-value";
+                        html += `<td class="${countClass}">${rewardCount}</td>`;
+                    });
+
+                    html += `</tr>`;
+                });
+
+                html += `</tbody></table>`;
+                
+                document.getElementById('table-container').innerHTML = html;
+
             } catch (error) {
-                console.error(error);
+                console.error("데이터 로드 실패:", error);
+                document.getElementById('table-container').innerHTML = "데이터를 불러오는데 실패했습니다. 시트 ID나 권한을 확인하세요.";
             }
         }
 
-        // 5초마다 갱신
+        // 5초마다 데이터 갱신
         setInterval(loadData, 5000);
         loadData();
     </script>
