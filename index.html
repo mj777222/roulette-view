@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>실시간 룰렛 현황</title>
+    <style>
+        /* 이전과 동일한 스타일 사용 */
+        body { background-color: #1a1a1a; color: white; font-family: sans-serif; padding: 20px; }
+        .card { background: #333; padding: 15px; margin-bottom: 10px; border-radius: 8px; border-left: 5px solid #00d26a; display:flex; justify-content:space-between; }
+        .nickname { font-weight: bold; color: #00ffcc; }
+        .time { font-size: 0.8em; color: #aaa; }
+        .reward { font-weight: bold; font-size: 1.2em; }
+    </style>
+</head>
+<body>
+    <h1 style="text-align:center; color:#FFD700;">🏆 명예의 전당 🏆</h1>
+    <div id="list-container">로딩 중...</div>
+
+    <script>
+        // 아까 복사한 스프레드시트 ID를 여기에 넣으세요!
+        const SHEET_ID = "1r3P3kwK51SAOzgTu-v0RtY0CliZ7JcWfzgarOdedql0";
+        
+        // Opensheet API를 사용하면 무료로 JSON 변환을 해줍니다.
+        const API_URL = `https://opensheet.elk.sh/${SHEET_ID}/1`;
+
+        async function loadData() {
+            try {
+                const response = await fetch(API_URL);
+                const data = await response.json();
+                
+                // 데이터 역순 정렬 (최신이 위로)
+                const reversedData = data.reverse();
+                
+                const container = document.getElementById('list-container');
+                container.innerHTML = "";
+
+                reversedData.forEach(row => {
+                    // 구글 시트 헤더 이름('닉네임', '시간', '보상')과 정확히 일치해야 함
+                    const nickname = row['닉네임'] || "익명";
+                    const time = row['시간'] || "-";
+                    const reward = row['보상'] || "알 수 없음";
+
+                    const card = document.createElement('div');
+                    card.className = 'card';
+                    card.innerHTML = `
+                        <div>
+                            <div class="nickname">${nickname}</div>
+                            <div class="time">${time}</div>
+                        </div>
+                        <div class="reward">${reward}</div>
+                    `;
+                    container.appendChild(card);
+                });
+            } catch (error) {
+                console.error(error);
+            }
+        }
+
+        // 5초마다 갱신
+        setInterval(loadData, 5000);
+        loadData();
+    </script>
+</body>
+</html>
